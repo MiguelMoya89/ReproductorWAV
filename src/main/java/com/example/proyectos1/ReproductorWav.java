@@ -16,14 +16,12 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-import javax.sound.sampled.*;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-public class Reproductor extends Application {
+public class ReproductorWav extends Application {
 
     private MediaPlayer mediaPlayer;
     private final List<String> audioFiles = new ArrayList<>();
@@ -33,16 +31,10 @@ public class Reproductor extends Application {
     private int currentSongIndex = -1;
     private boolean isRandomMode = false;
     private final TextArea songNameTextArea = new TextArea();
-    private final Slider tonalidadSlider = new Slider(-3, 2, 0);
-    private final Slider velocidadSlider = new Slider(0.001, 5, 1);
-    private final Slider ubicacionSlider = new Slider(0, 1, 0);
-    private final Slider volumenSlider = new Slider(0, 1, 0.5);
 
-    private boolean isRecording = false;
-    private AudioFormat audioFormat;
-    private TargetDataLine targetDataLine;
-    private Thread recordingThread;
-    private AudioRecorder audioRecorder = new AudioRecorder();
+    private final Slider velocidadSlider = new Slider(0.5, 2, 1);
+
+    private final Slider volumenSlider = new Slider(0, 1, 0.5);
 
 
     @Override
@@ -57,7 +49,6 @@ public class Reproductor extends Application {
         Button btnPausa = new Button("⏸");
         Button btnSiguiente = new Button("⏭");
         Button btnAleatorio = new Button("🔀");
-        Button btnGrabar = new Button("Rec");
 
         // Configurar los eventos para los botones
         btnSeleccionar.setOnAction(e -> seleccionarArchivo(primaryStage));
@@ -66,7 +57,6 @@ public class Reproductor extends Application {
         btnPausa.setOnAction(e -> pausaAudio());
         btnSiguiente.setOnAction(e -> reproducirSiguiente());
         btnAleatorio.setOnAction(e -> reproducirAleatorio());
-        btnGrabar.setOnAction(e -> grabarAudio());
 
         // Configurar el ListView para mostrar los archivos de audio
         audioListView.setPrefHeight(150);
@@ -93,24 +83,12 @@ public class Reproductor extends Application {
         songNameTextArea.setStyle("-fx-font-family: Arial; -fx-font-size: 14px;");
 
         // Configurar los sliders
-        tonalidadSlider.setPrefWidth(200);
+
         velocidadSlider.setPrefWidth(200);
-        ubicacionSlider.setPrefWidth(200);
+
         volumenSlider.setPrefWidth(200);
 
-        // Estilo de los sliders
-        tonalidadSlider.setStyle("-fx-base: #ff0000;"); // Rojo
-        velocidadSlider.setStyle("-fx-base: #00ff00;"); // Verde
-        ubicacionSlider.setStyle("-fx-base: #0000ff;"); // Azul
-        volumenSlider.setStyle("-fx-base: #ffff00;"); // Amarillo
 
-        // Agregar eventos a los sliders
-        tonalidadSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
-            if (mediaPlayer != null) {
-                double speed = Math.pow(8, newValue.doubleValue());
-                mediaPlayer.setRate(speed);
-            }
-        });
 
         velocidadSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
             if (mediaPlayer != null) {
@@ -118,14 +96,7 @@ public class Reproductor extends Application {
             }
         });
 
-        ubicacionSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
-            if (mediaPlayer != null) {
-                double duration = mediaPlayer.getTotalDuration().toSeconds();
-                mediaPlayer.setStartTime(Duration.seconds(newValue.doubleValue() * duration));
-                mediaPlayer.setCycleCount(MediaPlayer.INDEFINITE); // Repetir en bucle
-                mediaPlayer.play();
-            }
-        });
+
 
         volumenSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
             if (mediaPlayer != null) {
@@ -141,11 +112,11 @@ public class Reproductor extends Application {
         // Crear un HBox para organizar los botones horizontalmente
         HBox hbox = new HBox(6); // Espacio de 10 píxeles entre los botones
         hbox.setPadding(new Insets(0)); // Espacio de 10 píxeles alrededor del HBox
-        hbox.getChildren().addAll(btnReproducir, btnDetener, btnPausa, btnSiguiente, btnAleatorio, btnGrabar);
+        hbox.getChildren().addAll(btnReproducir, btnDetener, btnPausa, btnSiguiente, btnAleatorio);
 
         // Crear un VBox para organizar los sliders verticalmente
         VBox slidersVBox = new VBox(10);
-        slidersVBox.getChildren().addAll(tonalidadSlider, velocidadSlider, ubicacionSlider, volumenSlider);
+        slidersVBox.getChildren().addAll( velocidadSlider,  volumenSlider);
 
         // Crear un HBox para organizar el HBox de botones y el VBox de sliders
         HBox bottomHBox = new HBox(10);
@@ -263,103 +234,9 @@ public class Reproductor extends Application {
         }
     }
 
-    public class AudioRecorder {
-
-        private TargetDataLine targetDataLine;
-        private Thread recordingThread;
-
-        public void startRecording() throws LineUnavailableException {
-            Mixer.Info mixerInfo = getRecordingMixerInfo();
-            if (mixerInfo == null) {
-                System.out.println("No se encontró el mezclador de línea de grabación.");
-                return;
-            }
-
-            Mixer mixer = AudioSystem.getMixer(mixerInfo);
-
-            AudioFormat audioFormat = new AudioFormat(44100, 16, 2, true, false);
-            DataLine.Info dataLineInfo = new DataLine.Info(TargetDataLine.class, audioFormat);
-            targetDataLine = (TargetDataLine) mixer.getLine(dataLineInfo);
-            targetDataLine.open(audioFormat);
-            targetDataLine.start();
-
-            byte[] buffer = new byte[4096];
-            recordingThread = new Thread(() -> {
-                AudioInputStream audioInputStream = new AudioInputStream(targetDataLine);
-                File outputFile = new File("recorded_audio.wav");
-                try {
-                    AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, outputFile);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
-            recordingThread.start();
-        }
-
-        public void stopRecording() {
-            if (targetDataLine != null) {
-                targetDataLine.stop();
-                targetDataLine.close();
-            }
-            if (recordingThread != null) {
-                recordingThread.interrupt();
-                recordingThread = null;
-            }
-        }
-
-        private Mixer.Info getRecordingMixerInfo() {
-            Mixer.Info[] mixerInfos = AudioSystem.getMixerInfo();
-            for (Mixer.Info info : mixerInfos) {
-                Mixer mixer = AudioSystem.getMixer(info);
-                Line.Info[] lineInfos = mixer.getTargetLineInfo();
-                for (Line.Info lineInfo : lineInfos) {
-                    if (lineInfo.getLineClass().equals(TargetDataLine.class)) {
-                        // Verificar si es el mezclador de línea de grabación
-                        Line line;
-                        try {
-                            line = mixer.getLine(lineInfo);
-                            if (line instanceof TargetDataLine) {
-                                return info;
-                            }
-                        } catch (LineUnavailableException e) {
-                            // Ignorar y continuar con el siguiente mezclador
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-    }
-
-
-
-    private void grabarAudio() {
-        if (isRecording) {
-            // Detener la grabación
-            isRecording = false;
-            audioRecorder.stopRecording();
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Archivos WAV", "*.wav"));
-            File outputFile = fileChooser.showSaveDialog(null);
-            if (outputFile != null) {
-                File recordedFile = new File("recorded_audio.wav");
-                recordedFile.renameTo(outputFile);
-            }
-        } else {
-            // Comenzar la grabación
-            isRecording = true;
-            try {
-                audioRecorder.startRecording();
-            } catch (LineUnavailableException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     private void configurarMediaProperties() {
         mediaPlayer.setRate(velocidadSlider.getValue());
         mediaPlayer.setVolume(volumenSlider.getValue());
-        mediaPlayer.setStartTime(Duration.seconds(ubicacionSlider.getValue()));
         mediaPlayer.setCycleCount(MediaPlayer.INDEFINITE);
     }
 
@@ -367,6 +244,3 @@ public class Reproductor extends Application {
         launch(args);
     }
 }
-
-
-
